@@ -36,6 +36,8 @@ import EveningReview from './components/EveningReview';
 import QuickActions from './components/QuickActions';
 import AIInsights from './components/AIInsights';
 import InstallPrompt from './components/InstallPrompt';
+import Onboarding from './components/Onboarding';
+import DataManagement from './components/DataManagement';
 import { supabaseEnabled, loadStateFromCloud, saveStateToCloud } from './utils/supabase';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { INITIAL_HABITS, INITIAL_MEALS, INITIAL_MEAL_LIBRARY } from './constants';
@@ -47,6 +49,7 @@ const App: React.FC = () => {
   const [protocolsSaveStatus, setProtocolsSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [profileSaveStatus, setProfileSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [selectedMasterMeal, setSelectedMasterMeal] = useState<Meal | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('life_dashboard_active_session');
@@ -66,18 +69,8 @@ const App: React.FC = () => {
         setState({ ...saved, currentDate: getTodayDateStr() });
         return;
       }
-      const initialProfile = { ...DEFAULT_PROFILE, trackingStartDate: getTodayDateStr() };
-      setState({
-        logs: { [getTodayDateStr()]: createEmptyLog(getTodayDateStr(), INITIAL_HABITS, INITIAL_MEALS, initialProfile) },
-        currentDate: getTodayDateStr(),
-        view: 'today',
-        masterHabits: INITIAL_HABITS,
-        masterMeals: INITIAL_MEALS,
-        mealLibrary: INITIAL_MEAL_LIBRARY,
-        userProfile: initialProfile,
-        wealth: DEFAULT_WEALTH,
-        goals: DEFAULT_GOALS,
-      });
+      // First-time user — show onboarding
+      setNeedsOnboarding(true);
     };
     init();
     localStorage.setItem('life_dashboard_active_session', JSON.stringify(user));
@@ -254,6 +247,16 @@ const App: React.FC = () => {
   ];
 
   if (!user) return <Login onLogin={setUser} />;
+  if (needsOnboarding) return <Onboarding onComplete={(s) => { setState(s); setNeedsOnboarding(false); }} onSkip={() => {
+    const initialProfile = { ...DEFAULT_PROFILE, trackingStartDate: getTodayDateStr() };
+    setState({
+      logs: { [getTodayDateStr()]: createEmptyLog(getTodayDateStr(), INITIAL_HABITS, INITIAL_MEALS, initialProfile) },
+      currentDate: getTodayDateStr(), view: 'today',
+      masterHabits: INITIAL_HABITS, masterMeals: INITIAL_MEALS, mealLibrary: INITIAL_MEAL_LIBRARY,
+      userProfile: initialProfile, wealth: DEFAULT_WEALTH, goals: DEFAULT_GOALS,
+    });
+    setNeedsOnboarding(false);
+  }} />;
   if (!state || !currentLog) return <div className="h-screen bg-zinc-950 flex items-center justify-center"><div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>;
 
   const actualNutrition = currentLog.meals.reduce((acc, m) => {
@@ -493,7 +496,15 @@ const App: React.FC = () => {
         )}
 
         {state.view === 'account' && (
-          <AccountView user={user} profile={state.userProfile} stats={{ totalLogs: filteredLogs.length, memberSince: memberSinceFormatted }} onSaveProfile={handleProfileSave} onLogout={handleLogout} saveStatus={profileSaveStatus} />
+          <div className="space-y-8">
+            <AccountView user={user} profile={state.userProfile} stats={{ totalLogs: filteredLogs.length, memberSince: memberSinceFormatted }} onSaveProfile={handleProfileSave} onLogout={handleLogout} saveStatus={profileSaveStatus} />
+            <DataManagement
+              state={state}
+              onImport={(s) => setState({ ...s, currentDate: getTodayDateStr() })}
+              onReset={() => { if (user) { localStorage.removeItem(`life_dashboard_v2_${user.id}`); localStorage.removeItem(`life_dashboard_v1_${user.id}`); setState(null); setNeedsOnboarding(true); } }}
+              onRestartOnboarding={() => setNeedsOnboarding(true)}
+            />
+          </div>
         )}
       </main>
 
